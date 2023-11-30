@@ -1,15 +1,16 @@
 package dataSite;
 
-import centralSite.CentralSiteRemoteImplementation;
 import centralSite.CentralSiteRemoteInterface;
 
 import java.io.*;
-import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class DataProcessor implements Runnable{
     static ArrayList<Transaction> transactionList;
@@ -134,7 +135,6 @@ public class DataProcessor implements Runnable{
         //get the input transaction file transaction.txt
         String fileName = "transaction.txt";
         transactionList = parseInputFile(fileName);
-//        DataProcessor dp = new DataProcessor();
         //after fetching the list of transaction from all datasites,
         // I want the transactions to get assigned with transaction id from central site
         for(int i = 0; i < transactionList.size(); i++) {
@@ -146,6 +146,14 @@ public class DataProcessor implements Runnable{
                 stub = (DataSiteRemoteInterface) UnicastRemoteObject.exportObject(remoteObj, 0);
                 registry = LocateRegistry.createRegistry(i+50);
                 registry.bind("DataSiteServer" + i, stub);
+                ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
+                executorService.scheduleAtFixedRate(() -> {
+                    try {
+                        remoteObj.sayHello();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }, 0, 60, TimeUnit.SECONDS);
             } catch (Exception e) {
                 System.err.println(e.getMessage());
             }

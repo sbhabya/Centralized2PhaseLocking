@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.Hashtable;
 
 public class DataSiteRemoteImplementation implements  DataSiteRemoteInterface{
-    public String sayHello() throws RemoteException {
-        return "Hello, this is the server!";
+    public void sayHello() throws RemoteException {
+        System.out.println("Hello, this is the dataserver and I am listening");
     }
     public  Connection createConnection(String url) throws ClassNotFoundException, SQLException {
         // Establish a connection
@@ -19,9 +19,7 @@ public class DataSiteRemoteImplementation implements  DataSiteRemoteInterface{
     public ArrayList<Integer> getListOfDataSitesId(int curdt) {
         ArrayList<Integer> dtlist = new ArrayList<>();
         for(int i = 0; i < 4; i++) {
-            if(i!=curdt){
                 dtlist.add(i);
-            }
         }
         return dtlist;
     }
@@ -37,12 +35,12 @@ public class DataSiteRemoteImplementation implements  DataSiteRemoteInterface{
         }
     }
     @Override
-    public Boolean executeTransaction(Transaction t) throws RemoteException {
+    public synchronized Boolean executeTransaction(Transaction t) throws RemoteException {
         try {
             String url = "jdbc:sqlite:database"+t.getDataSiteId()+".sqlite";
             Connection con = createConnection(url);
             int i = 0;
-            Hashtable<String, Integer> lookupTable = new Hashtable<String, Integer>();
+            Hashtable<String, Integer> lookupTable = new Hashtable<>();
             ArrayList<String> elementNeedsUpdate = new ArrayList<>();
             while (i!=t.getOperations().size()){
                 Operation op = t.getOperations().get(i);
@@ -55,8 +53,8 @@ public class DataSiteRemoteImplementation implements  DataSiteRemoteInterface{
                         String item = resultSet.getString("name");
                         int value = resultSet.getInt("value");
                         lookupTable.put(item,value);
-                        System.out.println("Name of item read" + item);
-                        System.out.println("Name of item read" + value);
+                        System.out.println("Name of item read " + item);
+                        System.out.println("value of item read " + value);
                     }
                 } else if(op.getOperationType().equalsIgnoreCase("modify")){
                     String[] cmd = op.getOpCmd().split(" ");

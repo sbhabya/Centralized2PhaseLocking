@@ -3,9 +3,6 @@ package centralSite;
 import dataSite.DataSiteRemoteInterface;
 import dataSite.Operation;
 import dataSite.Transaction;
-
-import java.rmi.AccessException;
-import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -142,25 +139,9 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
     }
 
     public synchronized void deadLockDetectionMethod() {
-        System.out.println("Locks table before cycle detection");
-        System.out.println("---------------------");
-        Iterator<Map.Entry<String, Pair>> iterator = locksTable.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, Pair> entry = iterator.next();
-            String key = entry.getKey();
-            Pair pair = entry.getValue();
-            System.out.println("Key: " + key);
-            System.out.println("Printing read set ");
-            for(int rs:pair.readList){
-                System.out.println(rs);
-            }
-            System.out.println("Printing write set ");
-            for(int ws:pair.writeList){
-                System.out.println(ws);
-            }
-        }
-        System.out.println("---------------------");
+        System.out.println("Start checking");
         if(failedTList.size()!=0) {
+            System.out.println("There are " + failedTList.size());
             for (int i = 0; i < 4; i++) {
                 graph.add(new HashSet<>());
             }
@@ -209,6 +190,7 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
             ArrayList<Integer> cycleNodes = new ArrayList<>();
             boolean checkcycle = isCyclic(4, graph, cycleNodes);
             if (checkcycle) {
+                System.out.println("Deadlock Detected");
                 for (String d : dataItems) {
                     for (int c = 0; c < cycleNodes.size(); c++) {
                         if (locksTable.get(d).readList.contains(cycleNodes.get(c))) {
@@ -220,12 +202,10 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
 
                     }
                 }
-
-            }
             Set<Integer> cycleNodeSet = new HashSet<>(cycleNodes);
             cycleNodes = new ArrayList<>(cycleNodeSet);
             Collections.sort(cycleNodes);
-            for(int cn = 0; cn < cycleNodes.size(); cn++) {
+            for (int cn = 0; cn < cycleNodes.size(); cn++) {
                 int t = cycleNodes.get(cn);
                 int dataServerId = transactionOrderTable.get(cn).getDataSiteId();
                 boolean checklocks = false;
@@ -234,42 +214,55 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
                 } catch (RemoteException e) {
                     throw new RuntimeException(e);
                 }
-                if(checklocks){
-                    try{
-                        Registry registry = LocateRegistry.getRegistry("localhost", 50+dataServerId);
-                        DataSiteRemoteInterface remoteObj = (DataSiteRemoteInterface) registry.lookup("DataSiteServer"+dataServerId);
+                if (checklocks) {
+                    try {
+                        Registry registry = LocateRegistry.getRegistry("localhost", 50 + dataServerId);
+                        DataSiteRemoteInterface remoteObj = (DataSiteRemoteInterface) registry.lookup("DataSiteServer" + dataServerId);
                         Boolean exec = remoteObj.executeTransaction(transactionOrderTable.get(t));
-                        if(exec){
+                        if (exec) {
                             releaseLocks(transactionOrderTable.get(cn));
                             failedTList.remove(t);
                         }
-                        }
-                    catch (Exception e) {
+                    } catch (Exception e) {
                         System.err.println(e.getMessage());
                     }
 
                 }
+            }
+        } else {
+                for (int i = 0; i < failedTList.size(); i++) {
+                    int t = failedTList.get(i);
+                    int dataServerId = transactionOrderTable.get(i).getDataSiteId();
+                    boolean checklocks = false;
+                    while (checklocks!=true){
+                        try {
+                            checklocks = locksAvailable(transactionOrderTable.get(i));
+                        } catch (RemoteException e) {
+                            throw new RuntimeException(e);
+                        }
+
+                    }
+                    if (checklocks) {
+                        try {
+                            Registry registry = LocateRegistry.getRegistry("localhost", 50 + dataServerId);
+                            DataSiteRemoteInterface remoteObj = (DataSiteRemoteInterface) registry.lookup("DataSiteServer" + dataServerId);
+                            Boolean exec = remoteObj.executeTransaction(transactionOrderTable.get(t));
+                            if (exec) {
+                                releaseLocks(transactionOrderTable.get(i));
+                                failedTList.remove(t);
+                            }
+                        } catch (Exception e) {
+                            System.err.println(e.getMessage());
+                        }
+
+                    }
                 }
 
+
         }
-        System.out.println("Locks table after cycle detection");
-        System.out.println("---------------------");
-        Iterator<Map.Entry<String, Pair>> iterator1 = locksTable.entrySet().iterator();
-        while (iterator1.hasNext()) {
-            Map.Entry<String, Pair> entry = iterator1.next();
-            String key = entry.getKey();
-            Pair pair = entry.getValue();
-            System.out.println("Key: " + key);
-            System.out.println("Printing read set ");
-            for(int rs:pair.readList){
-                System.out.println(rs);
-            }
-            System.out.println("Printing write set ");
-            for(int ws:pair.writeList){
-                System.out.println(ws);
-            }
+
         }
-        System.out.println("---------------------");
+        System.out.println("all failed sites executed");
 
     }
 }
