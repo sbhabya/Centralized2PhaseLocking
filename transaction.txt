@@ -1,0 +1,18 @@
+0 begin transaction
+Read x
+x = x + 1
+Write x
+Read y
+Commit
+1 begin transaction
+Read y
+y = y + 1
+Write y
+Read x
+Commit
+2 begin transaction
+Read a
+Commit
+3 begin transaction
+Read b
+Commit
