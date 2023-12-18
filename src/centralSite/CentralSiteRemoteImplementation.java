@@ -21,14 +21,15 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
     public String sayHello() throws RemoteException {
         return "Hello, this is the server!";
     }
-
-    private static Object obj = new Object();
     @Override
     public synchronized Transaction receiveTransactionFromDataSite(Transaction t) throws RemoteException {
         transactionOrderTable.put(curTransactionId,t);
         t.setTransactionId(curTransactionId++);
         queue.add(t);
         return t;
+    }
+    public void addIntoFailedList(Transaction t) {
+        failedTList.add(t.getTransactionId());
     }
     public synchronized void releaseLocks(Transaction t) throws RemoteException {
         for(int i = 0; i< t.getOperations().size(); i++) {
@@ -42,10 +43,11 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
                 locksTable.put(key,p);
             }
         }
+        System.out.println("Transaction that released all its locks is " + t.getTransactionId() + "and it was running at datasite" + t.getDataSiteId() );
     }
     @Override
     public boolean locksAvailable(Transaction t) throws RemoteException {
-        System.out.println("Transaction that came for locks:  datasite = " + t.getDataSiteId() + " transactionnum: = " + t.getTransactionId() );
+        System.out.println("Transaction that came for locks is " + t.getTransactionId() + " and it is running at datasite" + t.getDataSiteId() );
         boolean check = true;
         int curTId = t.getTransactionId();
             for (int i = 0; i < t.getOperations().size(); i++) {
@@ -69,6 +71,8 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
                                     wl.add(curTId);
                                 } else if (wl.size() == 0 && rl.size() == 1 && rl.contains(curTId)) {
                                     wl.add(curTId);
+                                } else if (wl.size() == 1 && wl.contains(curTId)){
+                                    check = true;
                                 } else {
                                     check = false;
                                 }
@@ -92,7 +96,7 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
                     }
                 }
 
-        System.out.println("Transaction that got the locks:  datasite = " + t.getDataSiteId() + " transactionnum: = " + t.getTransactionId() + " " + check);
+        System.out.println("Transaction that got the locks is " + t.getTransactionId() + " and it is running at datasite" + t.getDataSiteId() );
         if(!check){
             tOrder.add(t.getTransactionId());
             failedTList.add(t.getTransactionId());
@@ -139,9 +143,8 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
     }
 
     public synchronized void deadLockDetectionMethod() {
-        System.out.println("Start checking");
         if(failedTList.size()!=0) {
-            System.out.println("There are " + failedTList.size());
+            System.out.println("There are " + failedTList.size() + " failed transactions");
             for (int i = 0; i < 4; i++) {
                 graph.add(new HashSet<>());
             }
@@ -207,10 +210,10 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
             Collections.sort(cycleNodes);
             for (int cn = 0; cn < cycleNodes.size(); cn++) {
                 int t = cycleNodes.get(cn);
-                int dataServerId = transactionOrderTable.get(cn).getDataSiteId();
+                int dataServerId = transactionOrderTable.get(t).getDataSiteId();
                 boolean checklocks = false;
                 try {
-                    checklocks = locksAvailable(transactionOrderTable.get(cn));
+                    checklocks = locksAvailable(transactionOrderTable.get(t));
                 } catch (RemoteException e) {
                     throw new RuntimeException(e);
                 }
@@ -220,8 +223,8 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
                         DataSiteRemoteInterface remoteObj = (DataSiteRemoteInterface) registry.lookup("DataSiteServer" + dataServerId);
                         Boolean exec = remoteObj.executeTransaction(transactionOrderTable.get(t));
                         if (exec) {
-                            releaseLocks(transactionOrderTable.get(cn));
-                            failedTList.remove(t);
+                            releaseLocks(transactionOrderTable.get(t));
+                            failedTList.remove(0);
                         }
                     } catch (Exception e) {
                         System.err.println(e.getMessage());
@@ -230,13 +233,16 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
                 }
             }
         } else {
+                System.out.println("Deadlock not detect. Transaction failed because other transaction is currently holding the locks");
+                Set<Integer> ss = new HashSet<>(failedTList);
+                failedTList = new ArrayList<>(ss);
                 for (int i = 0; i < failedTList.size(); i++) {
                     int t = failedTList.get(i);
-                    int dataServerId = transactionOrderTable.get(i).getDataSiteId();
+                    int dataServerId = transactionOrderTable.get(t).getDataSiteId();
                     boolean checklocks = false;
                     while (checklocks!=true){
                         try {
-                            checklocks = locksAvailable(transactionOrderTable.get(i));
+                            checklocks = locksAvailable(transactionOrderTable.get(t));
                         } catch (RemoteException e) {
                             throw new RuntimeException(e);
                         }
@@ -249,7 +255,7 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
                             Boolean exec = remoteObj.executeTransaction(transactionOrderTable.get(t));
                             if (exec) {
                                 releaseLocks(transactionOrderTable.get(i));
-                                failedTList.remove(t);
+                                failedTList.remove(0);
                             }
                         } catch (Exception e) {
                             System.err.println(e.getMessage());
@@ -260,9 +266,13 @@ public class CentralSiteRemoteImplementation implements CentralSiteRemoteInterfa
 
 
         }
+            if(failedTList.size() == 0){
+                System.out.println("all failed sites got executed");
+            }
 
+        } else {
+            System.out.println("Currently there are no failed transactions");
         }
-        System.out.println("all failed sites executed");
 
     }
 }

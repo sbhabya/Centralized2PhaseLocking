@@ -14,7 +14,7 @@ public class CentralSiteServer {
             CentralSiteRemoteInterface stub = (CentralSiteRemoteInterface) UnicastRemoteObject.exportObject(remoteObj, 0);
             Registry registry = LocateRegistry.createRegistry(45); // Default RMI registry port
             registry.bind("CentralSiteServer", stub);
-            System.out.println("Server ready");
+            System.out.println("Central Site Server ready");
             ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
             executorService.scheduleAtFixedRate(() -> {
                 try {
@@ -22,9 +22,9 @@ public class CentralSiteServer {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-            }, 0, 60, TimeUnit.SECONDS);
+            }, 0, 50, TimeUnit.SECONDS);
         } catch (Exception e) {
-            System.err.println("Server exception: " + e.toString());
+            System.err.println("Server exception: " + e.getMessage());
             e.printStackTrace();
         }
     }

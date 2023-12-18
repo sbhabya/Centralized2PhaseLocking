@@ -14,7 +14,6 @@ import java.util.concurrent.TimeUnit;
 
 public class DataProcessor implements Runnable{
     static ArrayList<Transaction> transactionList;
-
     Transaction curTransaction;
 
     public static ArrayList<Transaction> getTransactionList() {
@@ -95,20 +94,23 @@ public class DataProcessor implements Runnable{
         t = sendTransactionToServer(remoteObj,t);
         boolean locksStatus = acquireLocksOnTransaction(remoteObj,t);
         if(locksStatus){
-            DataSiteRemoteImplementation d = new DataSiteRemoteImplementation();
-            d.executeTransaction(t);
-            remoteObj.releaseLocks(t);
+                DataSiteRemoteImplementation d = new DataSiteRemoteImplementation();
+                boolean val = d.executeTransaction(t);
+                if(val){
+                    remoteObj.releaseLocks(t);
+                } else {
+                    remoteObj.releaseLocks(t);
+                    remoteObj.addIntoFailedList(t);
+                }
         }
-        String response = remoteObj.sayHello();
-        System.out.println("Response from server: " + response);
         } catch (Exception e) {
             System.err.println("Client exception: " + e.getMessage());
         }
+
     }
     public Transaction sendTransactionToServer(CentralSiteRemoteInterface obj, Transaction t) {
         try {
             t = obj.receiveTransactionFromDataSite(t);
-            System.out.println(t.getDataSiteId() + " " + t.getTransactionId());
             return t;
         } catch (RemoteException e) {
             System.err.println("Sending Transaction to central site failed" + e.getMessage());
@@ -141,7 +143,7 @@ public class DataProcessor implements Runnable{
             DataProcessor dp = new DataProcessor(transactionList.get(i));
             DataSiteRemoteImplementation remoteObj = new DataSiteRemoteImplementation();
             DataSiteRemoteInterface stub = null;
-            Registry registry = null; // Default RMI registry port
+            Registry registry = null;
             try {
                 stub = (DataSiteRemoteInterface) UnicastRemoteObject.exportObject(remoteObj, 0);
                 registry = LocateRegistry.createRegistry(i+50);
@@ -153,11 +155,11 @@ public class DataProcessor implements Runnable{
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
-                }, 0, 60, TimeUnit.SECONDS);
+                }, 0, 100, TimeUnit.SECONDS);
             } catch (Exception e) {
                 System.err.println(e.getMessage());
             }
-            System.out.println(" Data Server ready");
+            System.out.println(" Data Server"+ i + " ready");
             Thread myThread = new Thread(dp);
             myThread.start();
         }
